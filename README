@@ -1,0 +1,25 @@
+## Stack overflow exploits in x86 linux environment
+
+# 1) vuln1.c - mangles with the input string, so need to encode the 
+# shellcode(decode on the fly & transfer execution to the decoded shellcode).
+	- replaced all the shellcode bytes b/w \x68 & \x6e with \x67 to avoid mangling.
+	- decoder increments the respective bytes back to their original values.
+	Note: msfvenom is a much easier alternative instead of writing our own decoder.
+
+# 2) vuln2.c - stack is non-executable, so need to use code reuse technique.
+	- here we transfer execution to system() libc function after putting "/bin/bash" argument in the stack
+	- system() calls a execve() syscall on the provided argument "/bin/bash" giving us the shell.
+
+# 3) vuln3.c - root privileges are dropped, so we need to call seteuid(0) before calling system().
+	- seteuid() is available in libc just like system()
+	- But putting '0' arg in the stack is an issue as strcpy() will terminate if directly pass it through input.
+	- We find the appropriate ROP gadgets to put '0' in the stack
+		- a) copy esp into eax (in our case 'al' was altered because we couldn't find the right gadget)
+		- b) fix the altered eax
+		- c) offset eax enough such that it points to where '0' should be on the stack.
+			NOTE: we just provide dummy non-null bytes in this argument's location as it's overwritten anyway.
+		- d) get a reg to do xor on itself, so that reg has 0 in it.
+		- e) move above reg value into location referenced by eax.
+		- f) Now, we just transfer call to seteuid() and then pop;ret; to remove the '0' after.
+		- g) repeat problem 2 to call system()
+ 
